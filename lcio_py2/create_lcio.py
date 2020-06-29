@@ -102,7 +102,7 @@ for j in range( 0, nevt ):
     ### get from pickle file, loop over in the event cells
     for i in range(0,nshowers):
         sch = IMPL.SimCalorimeterHitImpl()
-        energy = wgan[j][i][3]
+        energy = wgan[j][i][3] / 1000.00  ## convert to GeV
         x = wgan[j][i][0]
         y = wgan[j][i][1]
         z = wgan[j][i][2]
