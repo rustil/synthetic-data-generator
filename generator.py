@@ -6,6 +6,8 @@ from torch import nn, optim
 from torch.nn import functional as F
 import time
 import models.dcgan3D as WGAN_Models
+import models.VAE_models as VAE_Models
+import models.CVGAN_conv3d as VGAN
 import json
 import pkbar
 import redis
@@ -90,7 +92,7 @@ def BibAE(model, model_PostProcess, number, E_max, E_min, batchsize, latent_dim,
 
             dataPP = dataPP.data.cpu().numpy()
             fake_list.append(dataPP)
-            energy_list.append(E)
+            energy_list.append(E.data.cpu().numpy())
     
     fake_full = np.vstack(fake_list)
     energy_full = np.vstack(energy_list)
@@ -109,7 +111,7 @@ def shower_photons(nevents, model, bsize, emax, emin):
         ngf = 32
         model_WGAN = WGAN_Models.DCGAN_G(ngf,LATENT_DIM).to(device)
         model_WGAN = nn.DataParallel(model_WGAN)
-        weightsGAN = 'weights/netG_itrs_21999.pth'
+        weightsGAN = 'weights/wgan.pth'
         model_WGAN.load_state_dict(torch.load(weightsGAN, map_location=torch.device(device)))
 
         if cuda:
@@ -129,14 +131,18 @@ def shower_photons(nevents, model, bsize, emax, emin):
         'latent' : 512
         }
 
-        model = VAE_Models.BiBAE_F_3D_LayerNorm_SmallLatent_Fast(args, ngf=8, device=device, z_rand=512-24,
+        model = VAE_Models.BiBAE_F_3D_LayerNorm_SmallLatent(args, device=device, z_rand=512-24,
                                                         z_enc=24).to(device) 
 
         model = nn.DataParallel(model)
+        checkpoint = torch.load('weights/bib-ae-PP.pth')
 
+        model.load_state_dict(checkpoint['model_state_dict'])
 
-        model_P = VAE_Models.PostProcess_EScale_EcondV2(bias=True, out_funct='none').to(device)
+        model_P = VAE_Models.PostProcess_Size1Conv_EcondV2(bias=True, out_funct='none').to(device)
         model_P = nn.DataParallel(model_P)
+        
+        model_P.load_state_dict(checkpoint['model_P_state_dict'])
         
         showers, energy = BibAE(model, model_P, nevents, emax, emin, bsize, 512, device)
         energy = energy.flatten()
@@ -180,7 +186,10 @@ def write_to_cache(showers, model_name, N):
 
 
 if __name__ == "__main__":
- 
+
+    parser = get_parser()
+    parse_args = parser.parse_args() 
+    
     bsize = parse_args.nbsize
     N = parse_args.nevents
     emax = parse_args.maxE

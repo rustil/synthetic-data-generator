@@ -1,0 +1,8 @@
+## numpy file
+*.npz
+
+## big weight file (pytorch)
+weights/
+
+## pycache files
+models/__pycache__/
