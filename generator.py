@@ -43,7 +43,7 @@ def get_parser():
 
     parser.add_argument('--model', action='store',
                         type=str, default="wgan",
-                        help='type of model')
+                        help='type of model (bib-ae or wgan)')
 
 
     return parser
@@ -85,7 +85,7 @@ def BibAE(model, model_PostProcess, number, E_max, E_min, batchsize, latent_dim,
     for i in np.arange(0, number, batchsize):
         with torch.no_grad():
             z.normal_()
-            E.uniform_(E_min*100, E_max*100)
+            E.uniform_(E_min, E_max)
            
             data = model(x=z, E_true=E, z=z, mode='decode')
             dataPP = model_PostProcess.forward(data, E)
