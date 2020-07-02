@@ -7,9 +7,9 @@ from pyLCIO import UTIL, EVENT, IMPL, IO, IOIMPL
 import numpy as np
 
 #---- number of events  -----
-nevt = 5
+nevt = 1000
 
-outfile = "wgan.slcio"
+outfile = "bibae-1k.slcio"
 
 #--------------------------------------------
 
@@ -21,7 +21,10 @@ print " opened outfile: " , outfile
 
 random.seed()
 
-wgan_file = np.load("cache_wgan.npz", allow_pickle=True)
+#f = open('/beegfs/desy/user/eren/data_generator/getting_high/training_data/cache_wgan.pickle', 'rb')
+#wgan = pickle.load(f)   
+#wgan=pickle.load(open('/beegfs/desy/user/eren/data_generator/getting_high/training_data/cache_wgan.pickle', 'r'))
+wgan_file = np.load("cache_bib-ae.npz", allow_pickle=True)
 wgan = wgan_file['x']
 
 
@@ -43,8 +46,6 @@ wrt.writeRunHeader( run )
 
 
 for j in range( 0, nevt ):
-
-    
 
     ### MC particle Collections
     colmc = IMPL.LCCollectionVec( EVENT.LCIO.MCPARTICLE ) 
@@ -95,14 +96,15 @@ for j in range( 0, nevt ):
     col.parameters().setValue(EVENT.LCIO.CellIDEncoding, 'system:0:5,module:5:3,stave:8:4,tower:12:4,layer:16:6,wafer:22:6,slice:28:4,cellX:32:-16,cellY:48:-16')
     
     evt.addCollection( col , "ECalBarrelSiHits" )
-   
+    #cell_id_encoder = UTIL.CellIDEncoder(IMPL.SimCalorimeterHitImpl)
+    #cd = cell_id_encoder('system:0:5,module:5:3,stave:8:4,tower:12:4,layer:16:6,wafer:22:6,slice:28:4,cellX:32:-16,cellY:48:-16', col)
 
     nshowers = len(wgan[j])
 
     ### get from pickle file, loop over in the event cells
     for i in range(0,nshowers):
         sch = IMPL.SimCalorimeterHitImpl()
-        energy = wgan[j][i][3] / 1000.00  ## convert to GeV
+        energy = wgan[j][i][3]  / 1000.0   ## convert to GeV
         x = wgan[j][i][0]
         y = wgan[j][i][1]
         z = wgan[j][i][2]
@@ -118,6 +120,8 @@ for j in range( 0, nevt ):
         
         col.addElement( sch )
 
+    if (j % 100) == 0:
+        print "Processing event #", j
 
     wrt.writeEvent( evt ) 
 

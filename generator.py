@@ -88,7 +88,7 @@ def BibAE(model, model_PostProcess, number, E_max, E_min, batchsize, latent_dim,
             E.uniform_(E_min, E_max)
            
             data = model(x=z, E_true=E, z=z, mode='decode')
-            dataPP = model_PostProcess.forward(data, E)
+            dataPP = F.relu(model_PostProcess.forward(data, E))
 
             dataPP = dataPP.data.cpu().numpy()
             fake_list.append(dataPP)
