@@ -152,9 +152,11 @@ def shower_photons(nevents, model, bsize, emax, emin):
     
     elif model == 'vgan':
         netG = VGAN.Generator(1).to(device)
-        netG = nn.DataParallel(netG)
+        #netG = nn.DataParallel(netG)
         w = 'weights/vgan.pth'
-        netG.load_state_dict(torch.load(w, map_location=torch.device(device)))
+        checkpoint = torch.load(w)
+        netG.load_state_dict(checkpoint['Generator'])
+
         LATENT_DIM = 100
         if cuda:
             noise = torch.cuda.FloatTensor(bsize, LATENT_DIM, 1,1,1)
@@ -164,7 +166,7 @@ def shower_photons(nevents, model, bsize, emax, emin):
             energy = torch.FloatTensor(bsize, 1,1,1,1) 
     
         
-        showers, energy = vGAN(model_WGAN, nevents, emax, emin, bsize, noise, energy, device)
+        showers, energy = vGAN(netG, nevents, emax, emin, bsize, noise, energy, device)
         energy = energy.flatten()
 
 
