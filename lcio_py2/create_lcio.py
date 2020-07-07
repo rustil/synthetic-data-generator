@@ -5,11 +5,41 @@ import pickle
 # --- LCIO dependencies ---
 from pyLCIO import UTIL, EVENT, IMPL, IO, IOIMPL
 import numpy as np
+import argparse
 
+
+def get_parser():
+    parser = argparse.ArgumentParser(
+        description='Generation',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    parser.add_argument('--inputfile', action='store',
+                        type=str, help='Name of the input file')
+
+    parser.add_argument('--output', action='store',
+                        type=str, help='Name of the output file')
+
+    parser.add_argument('--nevents', action='store',
+                        type=int, default=1000,
+                        help='Desired number of showers')
+
+    return parser
+
+
+parser = get_parser()
+parse_args = parser.parse_args() 
+    
 #---- number of events  -----
-nevt = 1000
+nevt = parse_args.nevents
 
-outfile = "bibae-1k.slcio"
+### input file ### 
+inputFile  = parse_args.inputfile
+
+### output file ### 
+outfile  = parse_args.output
+
+
 
 #--------------------------------------------
 
@@ -21,15 +51,12 @@ print " opened outfile: " , outfile
 
 random.seed()
 
-#f = open('/beegfs/desy/user/eren/data_generator/getting_high/training_data/cache_wgan.pickle', 'rb')
-#wgan = pickle.load(f)   
-#wgan=pickle.load(open('/beegfs/desy/user/eren/data_generator/getting_high/training_data/cache_wgan.pickle', 'r'))
-wgan_file = np.load("cache_bib-ae.npz", allow_pickle=True)
-wgan = wgan_file['x']
+npz_file = np.load(inputFile, allow_pickle=True)
+mapF = npz_file['x']
 
 
 #========== MC particle properties ===================
-p = 50.
+p = 20.
 genstat  = 1
 charge = 0.
 mass = 0.00 
@@ -99,19 +126,19 @@ for j in range( 0, nevt ):
     #cell_id_encoder = UTIL.CellIDEncoder(IMPL.SimCalorimeterHitImpl)
     #cd = cell_id_encoder('system:0:5,module:5:3,stave:8:4,tower:12:4,layer:16:6,wafer:22:6,slice:28:4,cellX:32:-16,cellY:48:-16', col)
 
-    nshowers = len(wgan[j])
+    nshowers = len(mapF[j])
 
     ### get from pickle file, loop over in the event cells
     for i in range(0,nshowers):
         sch = IMPL.SimCalorimeterHitImpl()
-        energy = wgan[j][i][3]  / 1000.0   ## convert to GeV
-        x = wgan[j][i][0]
-        y = wgan[j][i][1]
-        z = wgan[j][i][2]
-        id0 = wgan[j][i][4]
-        id1 = wgan[j][i][5]
+        energy = mapF[j][i][3]  / 1000.0   ## convert to GeV
+        x = mapF[j][i][0]
+        y = mapF[j][i][1]
+        z = mapF[j][i][2]
+        id0 = mapF[j][i][4]
+        id1 = mapF[j][i][5]
         position = array('f',[x,y,z])
-        #print x,y,z,energy
+  
         sch.setPosition(position)
         sch.setEnergy(energy)
         sch.setCellID0(int(id0))

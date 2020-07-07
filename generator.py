@@ -83,6 +83,8 @@ def vGAN(model, number, E_max, E_min, batchsize, fixed_noise, input_energy, devi
     fake_list=[]
     energy_list = []
     
+    model.eval()
+
     for i in np.arange(0, number, batchsize):
         with torch.no_grad():
             fixed_noise.uniform_(-1,1)
