@@ -7,7 +7,7 @@ from torch.nn import functional as F
 import time
 import models.dcgan3D as WGAN_Models
 import models.VAE_models as VAE_Models
-import models.CVGAN_conv3d as VGAN
+import models.GAN as VGAN
 import json
 import pkbar
 import redis
@@ -43,7 +43,7 @@ def get_parser():
 
     parser.add_argument('--model', action='store',
                         type=str, default="wgan",
-                        help='type of model (bib-ae or wgan)')
+                        help='type of model (bib-ae , wgan or gan)')
 
 
     return parser
@@ -51,6 +51,31 @@ def get_parser():
 
 
 def wGAN(model, number, E_max, E_min, batchsize, fixed_noise, input_energy, device):
+
+
+    pbar = pkbar.Pbar(name='Generating {} photon showers with energies [{},{}]'.format(number, E_max,E_min), target=number)
+    
+    fake_list=[]
+    energy_list = []
+    
+    for i in np.arange(0, number, batchsize):
+        with torch.no_grad():
+            fixed_noise.uniform_(-1,1)
+            input_energy.uniform_(E_min,E_max)
+            fake = model(fixed_noise, input_energy)
+            fake = fake.data.cpu().numpy()
+            fake_list.append(fake)
+            energy_list.append(input_energy.data.cpu().numpy())
+            pbar.update(i- 1 + batchsize)
+
+    energy_full = np.vstack(energy_list)
+    fake_full = np.vstack(fake_list)
+    fake_full = fake_full.reshape(len(fake_full), 30, 30, 30)
+
+    return fake_full, energy_full
+
+
+def vGAN(model, number, E_max, E_min, batchsize, fixed_noise, input_energy, device):
 
 
     pbar = pkbar.Pbar(name='Generating {} photon showers with energies [{},{}]'.format(number, E_max,E_min), target=number)
@@ -125,6 +150,25 @@ def shower_photons(nevents, model, bsize, emax, emin):
         showers, energy = wGAN(model_WGAN, nevents, emax, emin, bsize, noise, energy, device)
         energy = energy.flatten()
     
+    elif model == 'vgan':
+        netG = VGAN.Generator(1).to(device)
+        netG = nn.DataParallel(netG)
+        w = 'weights/vgan.pth'
+        netG.load_state_dict(torch.load(w, map_location=torch.device(device)))
+        LATENT_DIM = 100
+        if cuda:
+            noise = torch.cuda.FloatTensor(bsize, LATENT_DIM, 1,1,1)
+            energy = torch.cuda.FloatTensor(bsize, 1,1,1,1)
+        else:
+            noise = torch.FloatTensor(bsize, LATENT_DIM, 1,1,1)
+            energy = torch.FloatTensor(bsize, 1,1,1,1) 
+    
+        
+        showers, energy = vGAN(model_WGAN, nevents, emax, emin, bsize, noise, energy, device)
+        energy = energy.flatten()
+
+
+
     elif model == 'bib-ae':
         args = {
         'E_cond' : True,
