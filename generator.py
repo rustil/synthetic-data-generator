@@ -1,23 +1,22 @@
 import numpy as np
 import argparse
 import torch
+import array as arr
 import torch.utils.data
 from torch import nn, optim
 from torch.nn import functional as F
-import time
 import models.dcgan3D as WGAN_Models
 import models.VAE_models as VAE_Models
 import models.GAN as VGAN
 import json
 import pkbar
-import redis
 import time
-import multiprocessing as mp
-from multiprocessing import Pool,RLock
 import os 
 import pickle
 import json
+import random
 
+from pyLCIO import EVENT, UTIL, IOIMPL, IMPL
 
 def get_parser():
     parser = argparse.ArgumentParser(
@@ -44,6 +43,10 @@ def get_parser():
     parser.add_argument('--model', action='store',
                         type=str, default="wgan",
                         help='type of model (bib-ae , wgan or gan)')
+
+    parser.add_argument('--output', action='store',
+                        type=str, help='Name of the output file')
+
 
 
     return parser
@@ -120,10 +123,11 @@ def BibAE(model, model_PostProcess, number, E_max, E_min, batchsize, latent_dim,
             E.uniform_(E_min, E_max)
            
             data = model(x=z, E_true=E, z=z, mode='decode')
-            #dataPP = F.relu(model_PostProcess.forward(data, E))
+            dataPP = F.relu(model_PostProcess.forward(data, E))
 
-            #dataPP = dataPP.data.cpu().numpy()
-            data = data.data.cpu().numpy()
+            dataPP = dataPP.data.cpu().numpy()
+            #data = data.data.cpu().numpy()
+            
             ## hard cut for noisy images
             #dataPP[dataPP < 0.001] = 0.00
             
@@ -238,8 +242,116 @@ def write_to_cache(showers, model_name, N):
     np.savez('cache_'+model_name, x=data)
     
 
-         
+def write_to_lcio(showers, energy, model_name, outfile, N):
+    
+    ## get the dictionary
+    f = open('cell-map.pickle', 'rb')
+    cmap = pickle.load(f)  
+    
+    pbar_cache = pkbar.Pbar(name='Writing to lcio files', target=N)
 
+    wrt = IOIMPL.LCFactory.getInstance().createLCWriter( )
+
+    wrt.open( outfile , EVENT.LCIO.WRITE_NEW ) 
+
+    random.seed()
+
+
+
+    #========== MC particle properties ===================
+    genstat  = 1
+    charge = 0.
+    mass = 0.00 
+    decayLen = 1.e32 
+    pdg = 22
+
+
+    # write a RunHeader
+    run = IMPL.LCRunHeaderImpl() 
+    run.setRunNumber( 0 ) 
+    run.parameters().setValue("Generator", model_name)
+    run.parameters().setValue("PDG", pdg )
+    wrt.writeRunHeader( run ) 
+
+    for j in range( 0, N ):
+
+        ### MC particle Collections
+        colmc = IMPL.LCCollectionVec( EVENT.LCIO.MCPARTICLE ) 
+
+        ## we are shooting 90 deg. ECAL 
+        px = 0.00 
+        py = energy[j] 
+        pz = 0.00 
+
+        vx = 0.00
+        vy = 50.00
+        vz = 0.000
+
+        epx = 0.00
+        epy = 1800
+        epz = 0.00
+
+        momentum = arr.array('f',[ px, py, pz ] )  
+        vertex = arr.array('d',[vx,vy,vz])
+        endpoint = arr.array('d', [epx,epy,epz])
+
+
+        mcp = IMPL.MCParticleImpl() 
+        mcp.setGeneratorStatus( genstat ) 
+        mcp.setMass( mass )
+        mcp.setPDG( pdg ) 
+        mcp.setMomentum( momentum )
+        mcp.setCharge( charge )
+        mcp.setVertex(vertex)
+        mcp.setEndpoint(endpoint)
+
+        colmc.addElement( mcp )
+        
+        evt = IMPL.LCEventImpl() 
+        evt.setEventNumber( j ) 
+        evt.addCollection( colmc , "MCParticle" )
+
+
+        ### Calorimeter Collections
+        col = IMPL.LCCollectionVec( EVENT.LCIO.SIMCALORIMETERHIT ) 
+        flag =  IMPL.LCFlagImpl(0) 
+        flag.setBit( EVENT.LCIO.CHBIT_LONG )
+        flag.setBit( EVENT.LCIO.CHBIT_ID1 )
+
+        col.setFlag( flag.getFlag() )
+
+        col.parameters().setValue(EVENT.LCIO.CellIDEncoding, 'system:0:5,module:5:3,stave:8:4,tower:12:4,layer:16:6,wafer:22:6,slice:28:4,cellX:32:-16,cellY:48:-16')
+        evt.addCollection( col , "EcalBarrelCollection" )
+
+        
+
+        for layer in range(30):              ## loop over layers
+            nx, nz = np.nonzero(showers[j][layer])   ## get non-zero energy cells  
+            for k in range(0,len(nx)):
+                try:
+                    cell_energy = showers[j][layer][nx[k]][nz[k]] / 1000.0
+                    tmp = cmap[(layer, nx[k], nz[k])]
+
+                    sch = IMPL.SimCalorimeterHitImpl()
+
+                    position = arr.array('f', [tmp[0],tmp[1],tmp[2]])
+    
+                    sch.setPosition(position)
+                    sch.setEnergy(cell_energy)
+                    sch.setCellID0(int(tmp[3]))
+                    sch.setCellID1(int(tmp[4]))
+                    col.addElement( sch )
+
+                except KeyError:
+                    # Key is not present
+                    pass
+                    
+                                
+        pbar_cache.update(j)
+        
+        wrt.writeEvent( evt ) 
+
+    wrt.close() 
 
 
 if __name__ == "__main__":
@@ -252,7 +364,8 @@ if __name__ == "__main__":
     emax = parse_args.maxE
     emin = parse_args.minE
     model_name = parse_args.model
+    output_lcio = parse_args.output
 
     showers, energy = shower_photons(N, model_name, bsize, emax, emin)
-    write_to_cache(showers, model_name, N)
+    write_to_lcio(showers, energy, model_name, output_lcio, N)
     
