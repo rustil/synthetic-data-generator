@@ -56,7 +56,7 @@ mapF = npz_file['x']
 
 
 #========== MC particle properties ===================
-p = 20.
+p = 50.
 genstat  = 1
 charge = 0.
 mass = 0.00 

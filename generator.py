@@ -103,8 +103,13 @@ def vGAN(model, number, E_max, E_min, batchsize, fixed_noise, input_energy, devi
 
 def BibAE(model, model_PostProcess, number, E_max, E_min, batchsize, latent_dim,  device='cpu', thresh=0.0):
  
-    z = torch.cuda.FloatTensor(batchsize, latent_dim)
-    E = torch.cuda.FloatTensor(batchsize, 1)
+    if device == 'cuda': 
+        z = torch.cuda.FloatTensor(batchsize, latent_dim)
+        E = torch.cuda.FloatTensor(batchsize, 1)
+    else :
+        z = torch.FloatTensor(batchsize, latent_dim)
+        E = torch.FloatTensor(batchsize, 1)
+        
 
     fake_list=[]
     energy_list = []
@@ -115,10 +120,14 @@ def BibAE(model, model_PostProcess, number, E_max, E_min, batchsize, latent_dim,
             E.uniform_(E_min, E_max)
            
             data = model(x=z, E_true=E, z=z, mode='decode')
-            dataPP = F.relu(model_PostProcess.forward(data, E))
+            #dataPP = F.relu(model_PostProcess.forward(data, E))
 
-            dataPP = dataPP.data.cpu().numpy()
-            fake_list.append(dataPP)
+            #dataPP = dataPP.data.cpu().numpy()
+            data = data.data.cpu().numpy()
+            ## hard cut for noisy images
+            #dataPP[dataPP < 0.001] = 0.00
+            
+            fake_list.append(data)
             energy_list.append(E.data.cpu().numpy())
     
     fake_full = np.vstack(fake_list)
@@ -156,7 +165,7 @@ def shower_photons(nevents, model, bsize, emax, emin):
         netG = VGAN.Generator(1).to(device)
         #netG = nn.DataParallel(netG)
         w = 'weights/vgan.pth'
-        checkpoint = torch.load(w)
+        checkpoint = torch.load(w, map_location=torch.device(device))
         netG.load_state_dict(checkpoint['Generator'])
 
         LATENT_DIM = 100
@@ -183,7 +192,7 @@ def shower_photons(nevents, model, bsize, emax, emin):
                                                         z_enc=24).to(device) 
 
         model = nn.DataParallel(model)
-        checkpoint = torch.load('weights/bib-ae-PP.pth')
+        checkpoint = torch.load('weights/bib-ae-PP.pth', map_location=torch.device(device))
 
         model.load_state_dict(checkpoint['model_state_dict'])
 

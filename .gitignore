@@ -6,3 +6,6 @@ weights/
 
 ## pycache files
 models/__pycache__/
+
+# ILDConfig
+reconstruction/ILDConfig/
