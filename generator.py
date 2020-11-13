@@ -8,13 +8,33 @@ from torch.nn import functional as F
 import models.dcgan3D as WGAN_Models
 import models.VAE_models as VAE_Models
 import models.GAN as VGAN
-import json
+
+
+import streamlit as st
 import pkbar
 import time
 import os 
 import pickle
-import json
 import random
+
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+#mpl.use('GTKAgg')
+
+
+'''
+# Synthetic Shower Generation 
+
+Shower simulation is CPU intensive. Generative machine learning models based on deep neural networks are speeding up this task by several orders of magnitude
+
+## Generative Models:
+*  Generative Adversarial Network (GAN)
+*  Wasserstein Generative Adversarial Network (WGAN) 
+*  Bounded Information Bottleneck Variational Autoendoder (BiB-AE)
+
+'''
+
+
 
 from pyLCIO import EVENT, UTIL, IOIMPL, IMPL
 
@@ -25,21 +45,13 @@ def get_parser():
     )
 
     parser.add_argument('--nbsize', action='store',
-                        type=int, default=1,
+                        type=int, default=10,
                         help='Batch size for generation')
 
     parser.add_argument('--nevents', action='store',
                         type=int, default=1000,
                         help='Desired number of showers')
     
-    parser.add_argument('--maxE', action='store',
-                        type=int, default=50,
-                        help='Maximum energy of the shower')
-    
-    parser.add_argument('--minE', action='store',
-                        type=int, default=50,
-                        help='Maximum energy of the shower')
-
     parser.add_argument('--model', action='store',
                         type=str, default="wgan",
                         help='type of model (bib-ae , wgan or gan)')
@@ -51,29 +63,64 @@ def get_parser():
 
     return parser
 
+def getTotE(data, xbins, ybins, layers=30):
+    data = np.reshape(data,[-1, layers*xbins*ybins])
+    etot_arr = np.sum(data, axis=(1))
+    return etot_arr
+
+def make_plots(fake_data):
+    
+    status_text = st.empty()
+    status_text.text("Making some plots...")
+
+    fig, axs = plt.subplots(1, 1, sharey=True, tight_layout=True)
+    etot_fake = getTotE(fake_data, xbins=30, ybins=30)
+
+    n, bins, patches = axs.hist(etot_fake.flatten(), bins=25, range=[0, 1500],
+               weights=np.ones_like(etot_fake)/(float(len(etot_fake))),
+               label = "Simulated hits", color= 'blue',
+               histtype='stepfilled')
+    
+
+    st.pyplot(fig)
+
+
 
 
 def wGAN(model, number, E_max, E_min, batchsize, fixed_noise, input_energy, device):
 
 
-    pbar = pkbar.Pbar(name='Generating {} photon showers with energies [{},{}]'.format(number, E_max,E_min), target=number)
+    #pbar = pkbar.Pbar(name='Generating {} photon showers with energies [{},{}]'.format(number, E_max,E_min), target=number)
     
     fake_list=[]
     energy_list = []
     
-    for i in np.arange(0, number, batchsize):
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    status_text.text("Generating {} photon showers. Current models is WGAN".format(number))
+
+    for i in np.arange(batchsize, number+1, batchsize):
         with torch.no_grad():
             fixed_noise.uniform_(-1,1)
             input_energy.uniform_(E_min,E_max)
             fake = model(fixed_noise, input_energy)
             fake = fake.data.cpu().numpy()
+            
             fake_list.append(fake)
             energy_list.append(input_energy.data.cpu().numpy())
-            pbar.update(i- 1 + batchsize)
+
+            
+            progress_bar.progress(int(i* 100 / number))            
+            
 
     energy_full = np.vstack(energy_list)
     fake_full = np.vstack(fake_list)
     fake_full = fake_full.reshape(len(fake_full), 30, 30, 30)
+
+    
+    progress_bar.empty()
+    
 
     return fake_full, energy_full
 
@@ -81,7 +128,7 @@ def wGAN(model, number, E_max, E_min, batchsize, fixed_noise, input_energy, devi
 def vGAN(model, number, E_max, E_min, batchsize, fixed_noise, input_energy, device):
 
 
-    pbar = pkbar.Pbar(name='Generating {} photon showers with energies [{},{}]'.format(number, E_max,E_min), target=number)
+    #pbar = pkbar.Pbar(name='Generating {} photon showers with energies [{},{}]'.format(number, E_max,E_min), target=number)
     
     fake_list=[]
     energy_list = []
@@ -96,7 +143,7 @@ def vGAN(model, number, E_max, E_min, batchsize, fixed_noise, input_energy, devi
             fake = fake.data.cpu().numpy()
             fake_list.append(fake)
             energy_list.append(input_energy.data.cpu().numpy())
-            pbar.update(i- 1 + batchsize)
+            #pbar.update(i- 1 + batchsize)
 
     energy_full = np.vstack(energy_list)
     fake_full = np.vstack(fake_list)
@@ -210,45 +257,20 @@ def shower_photons(nevents, model, bsize, emax, emin):
     
     return showers, energy  
 
-def write_to_cache(showers, model_name, N):
-    
-    ## get the dictionary
-    f = open('cell-map.pickle', 'rb')
-    cmap = pickle.load(f)  
-    
-    pbar_cache = pkbar.Pbar(name='Writing to cache', target=N)
-
-    elist = []
-
-    for event in range(len(showers)):      ## events
-        elist.append([])
-        for layer in range(30):              ## loop over layers
-            nx, nz = np.nonzero(showers[event][layer])   ## get non-zero energy cells  
-            for j in range(0,len(nx)):
-                try:
-                    cell_energy = showers[event][layer][nx[j]][nz[j]]
-                    tmp = cmap[(layer, nx[j], nz[j])]
-                    elist[event].append([tmp[0], tmp[1], tmp[2], cell_energy, tmp[3], tmp[4]])
-                except KeyError:
-                    # Key is not present
-                    pass
-                    
-                                
-        
-        pbar_cache.update(event)
-
-    
-    data = np.array(elist)
-    np.savez('cache_'+model_name, x=data)
-    
 
 def write_to_lcio(showers, energy, model_name, outfile, N):
     
+
+    status_text = st.empty()
+    
+    status_text.text("Writing to LCIO files...")
+    progress_bar = st.progress(0)
+
     ## get the dictionary
     f = open('cell-map.pickle', 'rb')
     cmap = pickle.load(f)  
     
-    pbar_cache = pkbar.Pbar(name='Writing to lcio files', target=N)
+    #pbar_cache = pkbar.Pbar(name='Writing to lcio files', target=N)
 
     wrt = IOIMPL.LCFactory.getInstance().createLCWriter( )
 
@@ -347,10 +369,14 @@ def write_to_lcio(showers, energy, model_name, outfile, N):
                     pass
                     
                                 
-        pbar_cache.update(j)
+        progress_bar.progress(int(j*100/N))
         
         wrt.writeEvent( evt ) 
 
+    progress_bar.empty()
+    st.info('LCIO file was created: {}'.format(os.getcwd() + '/'+outfile))
+    status_text_rec = st.empty()
+    status_text_rec.text("We are ready to run reconstruction via iLCsoft")
     wrt.close() 
 
 
@@ -361,11 +387,20 @@ if __name__ == "__main__":
     
     bsize = parse_args.nbsize
     N = parse_args.nevents
-    emax = parse_args.maxE
-    emin = parse_args.minE
+    
     model_name = parse_args.model
     output_lcio = parse_args.output
 
-    showers, energy = shower_photons(N, model_name, bsize, emax, emin)
-    write_to_lcio(showers, energy, model_name, output_lcio, N)
+    
+
+    wgan_check = st.checkbox('Generate photons with WGAN model')
+    values = st.slider( 'Select a range of photon energies', 0.0, 100.0, (25.0, 75.0))
+
+    emin=values[0]
+    emax=values[1]
+
+    if wgan_check:
+        showers, energy = shower_photons(N, model_name, bsize, emax, emin)
+        write_to_lcio(showers, energy, model_name, output_lcio, N)
+        make_plots(showers)
     

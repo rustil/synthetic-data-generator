@@ -9,3 +9,6 @@ models/__pycache__/
 
 # ILDConfig
 reconstruction/ILDConfig/
+
+#LCIO files
+*.slcio
