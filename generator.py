@@ -11,7 +11,7 @@ import models.GAN as VGAN
 
 
 import streamlit as st
-import pkbar
+#import pkbar
 import time
 import os 
 import pickle
@@ -48,10 +48,6 @@ def get_parser():
                         type=int, default=10,
                         help='Batch size for generation')
 
-    parser.add_argument('--nevents', action='store',
-                        type=int, default=1000,
-                        help='Desired number of showers')
-    
     parser.add_argument('--model', action='store',
                         type=str, default="wgan",
                         help='type of model (bib-ae , wgan or gan)')
@@ -386,21 +382,31 @@ if __name__ == "__main__":
     parse_args = parser.parse_args() 
     
     bsize = parse_args.nbsize
-    N = parse_args.nevents
-    
+
     model_name = parse_args.model
     output_lcio = parse_args.output
 
     
 
     wgan_check = st.checkbox('Generate photons with WGAN model')
-    values = st.slider( 'Select a range of photon energies', 0.0, 100.0, (25.0, 75.0))
+    
+    nevts = st.slider( 'Number of photon showers', 100, 5000, 500, step=bsize)
 
-    emin=values[0]
-    emax=values[1]
+    evalues = st.slider( 'Select a range of photon energies', 0.0, 100.0, (25.0, 75.0))
+
+   
+
+    emin=evalues[0]
+    emax=evalues[1]
+
+    
 
     if wgan_check:
-        showers, energy = shower_photons(N, model_name, bsize, emax, emin)
-        write_to_lcio(showers, energy, model_name, output_lcio, N)
+        showers, energy = shower_photons(nevts, model_name, bsize, emax, emin)
+        write_to_lcio(showers, energy, model_name, output_lcio, nevts)
         make_plots(showers)
     
+    reco = st.checkbox('Run Reconstruction in iLCSoft')
+    if reco and not os.path.exists(os.getcwd() + '/rec.lock'):
+            os.mknod(os.getcwd() + '/rec.lock')
+

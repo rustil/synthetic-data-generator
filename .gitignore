@@ -12,3 +12,6 @@ reconstruction/ILDConfig/
 
 #LCIO files
 *.slcio
+
+##ILDConfig
+ILDConfig/
