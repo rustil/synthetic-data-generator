@@ -132,7 +132,7 @@ def main():
     gpu = parse_args.cuda and torch.cuda.is_available()
     assert gpu or not parse_args.cuda, "Cuda is chosen, but not available."
     device = torch.device("cuda" if gpu else "cpu")
-    print("GPU: {}, Device: {}".format(gpu, device))
+    print("Device used: {}".format(gpu, device))
     if not gpu:
         torch.set_num_threads(1)
 
@@ -143,7 +143,7 @@ def main():
         #model_WGAN = WGAN_Models.DCGAN_G(ngf,LATENT_DIM).to(device)
         model_WGAN = WGAN_Models.DCGAN_G_nonSeq(ngf,LATENT_DIM).to(device)
 
-        model_WGAN = nn.DataParallel(model_WGAN)
+        # model_WGAN = nn.DataParallel(model_WGAN) # This always moves the model to GPU
 
 
         #weightsGAN = 'WGAN_model/netG_itrs_10999.pth'
@@ -207,11 +207,11 @@ def main():
         model = VAE_Models.BiBAE_F_3D_LayerNorm_SmallLatent_Fast(args, ngf=8, device=device, z_rand=512-24,
                                                         z_enc=24).to(device)
 
-        model = nn.DataParallel(model)
+        # model = nn.DataParallel(model)
 
 
         model_P = VAE_Models.PostProcess_EScale_EcondV2(bias=True, out_funct='none').to(device)
-        model_P = nn.DataParallel(model_P)
+        # model_P = nn.DataParallel(model_P)
 
         tlist = []
         for exp in range(1,nexp+1):
