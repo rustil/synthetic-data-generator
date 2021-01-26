@@ -61,11 +61,11 @@ def getFakeImagesGAN(model, number, E_max, E_min, batchsize, fixed_noise, input_
 
     for i in np.arange(0, number, batchsize):
         with torch.no_grad():
-            fixed_noise.uniform_(-1, 1)
-            input_energy.uniform_(E_min, E_max)
 
             if gpu:
                 forward_start_event.record()
+                fixed_noise.uniform_(-1, 1)
+                input_energy.uniform_(E_min, E_max)
                 fake = model(fixed_noise, input_energy)
                 forward_end_event.record()
                 torch.cuda.synchronize()
@@ -73,6 +73,8 @@ def getFakeImagesGAN(model, number, E_max, E_min, batchsize, fixed_noise, input_
                     forward_end_event)
             else:
                 forward_start = time.perf_counter()
+                fixed_noise.uniform_(-1, 1)
+                input_energy.uniform_(E_min, E_max)
                 fake = model(fixed_noise, input_energy)
                 forward_end = time.perf_counter()
                 forward_time_ms = (forward_end - forward_start) * 1000
@@ -100,11 +102,11 @@ def getFakeImagesVAE_ENR_PostProcess(model, model_PostProcess, number, E_max, E_
 
     for i in np.arange(0, number, batchsize):
         with torch.no_grad():
-            z.normal_()
-            E.uniform_(E_min * 100, E_max * 100)
 
             if device.type == "cuda":
                 forward_start_event.record()
+                z.normal_()
+                E.uniform_(E_min * 100, E_max * 100)
                 data = model(x=z, E_true=E, z=z, mode='decode')
                 dataPP = model_PostProcess.forward(data, E)
                 forward_end_event.record()
@@ -113,6 +115,8 @@ def getFakeImagesVAE_ENR_PostProcess(model, model_PostProcess, number, E_max, E_
                     forward_end_event)
             else:
                 forward_start = time.perf_counter()
+                z.normal_()
+                E.uniform_(E_min * 100, E_max * 100)
                 data = model(x=z, E_true=E, z=z, mode='decode')
                 dataPP = model_PostProcess.forward(data, E)
                 forward_end = time.perf_counter()
